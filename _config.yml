@@ -1,12 +1,12 @@
 # Basic
-title: bsmali4
-subtitle: 个人站
-description: 欢迎来到我的个人站~
+title: bsmali4关注网络安全
+subtitle: 个人小窝
+description: python和java的故事~
 # 头像里面的标题
-avatarTitle: leopardpan
+avatarTitle: bsmali4
 # 头像里面的描述
-avatarDesc: iOS / 机器学习
-url: "http://baixin.io"
+avatarDesc: 网络安全 / 编程开发
+url: "http://www.codersec.net"
 
 # Comment
 comment:
@@ -15,21 +15,17 @@ comment:
 
 # Social
 social:
-    weibo: 5366874726 
-    github: leopardpan
+    weibo: no 
+    github: bsmali4
     # twitter: 
-    mail: leopardpan@icloud.com
+    mail: root@codersec.net
 
 # 百度统计 
 # 使用博客模板请去掉或者更换 id 
-baidu:
-    id: 8ba1c6be0953b6f9c2ba38e57f615421  
+
 
 # Google Analytics
 # 使用博客模板请去掉或者更换 id
-ga:
-    id: UA-84134159-3   
-    host: auto  
 
 
 # 《----------------- 上面的信息修改成你自己的 ---------------------------》
