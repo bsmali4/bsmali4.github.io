@@ -3,7 +3,8 @@ layout: page
 title: 关于我 
 ---
 
-一个 iOS SDK 开发者，喜欢研究一些新技术。
+91ri.org成员小组成员
+ctf战队3years成员
 <p>
 平时喜欢整理个人博客，逛逛技术论坛。
 <p>
