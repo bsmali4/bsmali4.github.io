@@ -1,9 +1,9 @@
 # Basic
-title: 恶魔焦的小兔窝
+title: bsmali4的小窝
 subtitle: 个人小窝
-description: 什么都略懂一点~
+description: 明明真的很帅~
 # 头像里面的标题
-avatarTitle: 恶魔焦
+avatarTitle: bsmali4
 # 头像里面的描述
 avatarDesc: 网络安全 / 编程开发
 url: "http://www.codersec.net"
@@ -11,14 +11,14 @@ url: "http://www.codersec.net"
 # Comment
 comment:
     # disqus: leopard
-    duoshuo: leopard 
+    duoshuo: bsmali4 
 
 # Social
 social:
     weibo: no 
-    github: S0uLHun43r
+    github: bsmali4
     # twitter: 
-    mail: root@catchrabbit.cc
+    mail: root@codersec.net
 # 百度统计 
 # 使用博客模板请去掉或者更换 id 
 
@@ -52,7 +52,8 @@ blog_button:
 nav:
     - {title: 所有文章, description: archive, url: '/archive'}   
     - {title: 标签, description: tags, url: '/tags'}      
-    - {title: 关于我, description: about, url: '/about'}      
+    - {title: 关于我, description: about, url: '/about'}
+    - {title: 我的邻居, description: archive, url: '/links'}  
     
 
 # Pagination
