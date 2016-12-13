@@ -1,25 +1,11 @@
 ---
 layout: page
-title: 
-header: 根据快速导航到相应的文章
-group: navigation
+title: 我的收藏
 ---
-{% include JB/setup %}
 
-<ul class="tag_box inline">
-  {% assign tags_list = site.tags %}  
-  {% include JB/tags_list %}
-</ul>
-
-<div class = "card">
-{% for tag in site.tags %} 
-
-  <h3 id="{{ tag[0] }}-ref">{{ tag[0] }}</h3>
-  <ul>
-    {% assign pages_list = tag[1] %}  
-    {% include JB/pages_list %}
-  </ul>
-
-
-{% endfor %}
-</div>
+[   基掌柜  ](http://7ever.org/)｜[91ri攻防指南](http://www.91ri.org/)<p>
+[lmva蜀黍](https://www.lmva.cc/)|[ ch4r0n表哥 ](http://www.sweetear.cn/)<p>
+[ phpinfo ](https://phpinfo.me/)|[90's博客](https://www.unhonker.com/)<p>
+[柠檬草](http://www.cnblogs.com/iamstudy/)|[乐师傅](http://www.yqxiaojunjie.com/)<p>
+[bystudent](http://www.bystudent.com/)|[画船师傅](http://blog.nuptzj.cn/)<p>
+[LoRexxar](http://www.lorexxar.cn/)|[大奶琪](https://lazydog.me/)<p>
