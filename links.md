@@ -8,4 +8,4 @@ title: 我的收藏
 [ phpinfo ](https://phpinfo.me/)|[90's博客](https://www.unhonker.com/)
 [柠檬草](http://www.cnblogs.com/iamstudy/)|[乐师傅](http://www.yqxiaojunjie.com/)
 [bystudent](http://www.bystudent.com/)|[画船师傅](http://blog.nuptzj.cn/)
-[LoRexxar](http://www.lorexxar.cn/)|[大奶琪](https://lazydog.me/)
+[LoRexxar](http://www.lorexxar.cn/)|[大奶琪](https://lazydog.me/)|[二进制牛](http://whereisk0shl.top)
