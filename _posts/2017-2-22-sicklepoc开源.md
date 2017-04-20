@@ -39,6 +39,9 @@ python main.py --file target.txt --plugins tomcat,redis --level 4
 如何优雅的写代码很重要，在开发sickle中用到了很多设计模式的东西，现在回过头来看，设计模式真的是很精妙。
 如果有时间，我会把整个开发过程遇到的问题以及怎么去解决的分享出来。
 
+#下载
+https://github.com/bsmali4/sicklepoc
+
 
 
 
