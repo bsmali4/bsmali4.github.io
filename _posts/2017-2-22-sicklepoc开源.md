@@ -15,7 +15,9 @@ tag: 编程开发
 centos的安装环境请运行SickleInstallCentos.bash
 
 ubuntu的请运行SickleInstallUbuntu.bash
-
+#功能
+探测服务
+扫描端口后调用插件扫描
 #使用方法
 ![](http://i2.muimg.com/567571/e35d26f5919abd84.png)
 target指定模式
