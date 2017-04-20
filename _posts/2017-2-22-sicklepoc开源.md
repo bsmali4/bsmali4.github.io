@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "sicklepoc开源，自定义你的扫描报告"
+title: "sicklepoc开源"
 date: 2017-04-20
 description: "编程开发"
 tag: 编程开发
