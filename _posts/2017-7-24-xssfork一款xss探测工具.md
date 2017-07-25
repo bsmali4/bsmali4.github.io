@@ -37,9 +37,7 @@ xssfork作为sicklescan的一个功能模块，其开发主要目的是用于检
 ### uppercase
 随机大小写
 将
-```
 &lt;script&gt;alert(65534);&lt;/script&gt;
-```
 转换成
 ```
 &lt;ScRIPt&gt;alert(65534);&lt;/ScRIpT&gt;
