@@ -45,7 +45,7 @@ xssfork作为sicklescan的一个功能模块，其开发主要目的是用于检
 &lt;ScRIPt&gt;alert(65534);&lt;/ScRIpT&gt;
 ```
 ### addkeywords
-主要是应对过滤为replace('keywords','')的情况  
+主要是应对过滤为replace('keyword&gt;s','')的情况  
 ```
 &lt;script&gt;alert(65534);&lt;/script&gt;
 ```变成
@@ -54,23 +54,38 @@ xssfork作为sicklescan的一个功能模块，其开发主要目的是用于检
 ```
 当然默认开启的是轻量模式，即只返回一个payload，开启重量模式，可以生成更加丰富的pyaload，效果如下
 ```
-&lt;script&gt;alert(65534);&lt;/script&gt;
-&lt;script&gt;alert(65534);&lt;/ScrIpt&gt;
-&lt;ScrIpt&gt;alert(65534);&lt;/sCrIpt&gt; 
-&lt;scRiPt&gt;alert(65534);&lt;/script&gt; 
+&lt;script&gt;alert(65534);&lt;/script&gt;  
+&lt;script&gt;alert(65534);&lt;/ScrIpt&gt;  
+&lt;ScrIpt&gt;alert(65534);&lt;/sCrIpt&gt;  
+&lt;scRiPt&gt;alert(65534);&lt;/script&gt;  
 &lt;ScrIpt&gt;alert(65534);&lt;/script&gt;
 ```
 ## 演示
+场景1.反射型xss  
+![](http://shentoushi.top/manypic/Uploads/2016-09-26/%E5%8F%8D%E5%B0%84%E5%9E%8Bxss.gif)  
+场景2.大小写绕过  
+![](http://shentoushi.top/manypic/Uploads/2016-09-26/%E5%A4%A7%E5%B0%8F%E5%86%99%E7%BB%95%E8%BF%871%20xss.gif)
+![](http://shentoushi.top/manypic/Uploads/2016-09-26/%E5%A4%A7%E5%B0%8F%E5%86%99%E7%BB%95%E8%BF%872%20xss.gif)  
+场景3.dom型xss  
+![](http://shentoushi.top/manypic/Uploads/2016-09-26/dom%20xss1.gif)
+![](http://shentoushi.top/manypic/Uploads/2016-09-26/dom%20xss2.gif)
+场景3.post类型
+![](http://shentoushi.top/manypic/Uploads/2016-09-26/post%20xss1.gif)
+场景4.需要验证cookie
+![](http://shentoushi.top/manypic/Uploads/2016-09-26/cookie%20xss.gif)
+
+
 ![](http://ohsqlm7gj.bkt.clouddn.com/2017-07-24%20at%20%E4%B8%8B%E5%8D%884.23.gif)
 ![](http://ohsqlm7gj.bkt.clouddn.com/2017-07-24%20at%20%E4%B8%8B%E5%8D%884.27.gif)
  post类型  
- python xssfork.py -u xx -d 'xx'  
+ python xssfork.py -u "xx" -d "xx"
  存储型  
- python xssfork.py -u xx -d 'xxx' -D '输出位置'
- 当然还可依携带cookie
+ python xssfork.py -u "xx" -d "xxx" -D "输出位置"
+ 带cookie
+ python xssfork.py -u "xx" -c "xx"
 ## 说明
 开源只为分享，请勿将本脚本做任何商业性质的集成。开发的时候，有可能很多情况没有考虑到，如果你有更好的建议或者发现bug，可以联系我邮箱,xssfork.codersec.net网站还在建设中,github不要吝啬你的star。
 root@codersec.net  
-开源地址 https://github.com/bsmali4/xssfork，记得不要吝啬你的star
-
+开源地址 https://github.com/bsmali4/xssfork
+记得不要吝啬你的star
 
