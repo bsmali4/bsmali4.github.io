@@ -20,7 +20,7 @@ http://localhost:8080/oauth/authorize?responsetype=token&clientid=acme&redirect_
 继续在此处下断点，其中内容是spring框架定义的一个模版
 ![](http://ohsqlm7gj.bkt.clouddn.com/17-9-3/39716306.jpg)，后面所有的异常信息网页都是基于这个模版去修改的。进入这个函数来到org.springframework.util.PropertyPlaceholderHelper里面，其中parseStringValue函数是整个异常网页内容的生成函数。
 ![](http://ohsqlm7gj.bkt.clouddn.com/17-9-3/10984658.jpg)经过对整个函数的调试分析，可以理出函数的大致流程如下，关键代码有注释:
-```  
+```
 protected String parseStringValue(String strVal, PropertyPlaceholderHelper.PlaceholderResolver placeholderResolver, Set<String> visitedPlaceholders) {
         StringBuilder result = new StringBuilder(strVal);// 新建一个string buffer ，第一次是默认的 <html><body><h1>OAuth Error</h1><p>${errorSummary}</p></body></html>**/
         int startIndex = strVal.indexOf(this.placeholderPrefix);//获取result中${的位置，其实后面整个流程就是，将异常的信息替换掉${}中的内容，然后将其包装成html流
