@@ -59,4 +59,5 @@ SpEL表达式，当函数将error=&quot;invalid_grant&quot;, error_description=&
 5. 函数再次解析出${}  中的内容也就是1-65535，将其传给resolvePlaceholder处理，但是resolvePlaceholder里面是什么？
 SpEL表达式啊，于是就被解析，最终一步步封装展示到网页上。
 ##  补丁分析  
+![](http://ohsqlm7gj.bkt.clouddn.com/17-9-3/20671371.jpg)
 可以看到它是将this.helper = new PropertyPlaceholderHelper("${", "}");变成了  this.helper = new PropertyPlaceholderHelper( new RandomValueStringGenerator().generate() + "{", "}")换言之也就是将$先变成一个随机数，那么我们的${1-65535}无法被解析成SpEL,但是RandomValueStringGenerator().generate()是一个随机的6位数，理论上依旧存在被爆破的风险。假设我们爆破出来为123456,然后http://localhost:8080/oauth/authorize?responsetype=token&clientid=acme&redirect_uri=123456{1-65535}即可执行。
