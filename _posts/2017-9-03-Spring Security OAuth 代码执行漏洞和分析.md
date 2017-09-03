@@ -19,7 +19,7 @@ http://localhost:8080/oauth/authorize?responsetype=token&clientid=acme&redirect_
 我们在关键位置下断点来调适我们的程序，经过调试之后发现在代码处String result = this.helper.replacePlaceholders(this.template, this.resolver)执行后,${1-65535}被执行
 继续在此处下断点，其中内容是spring框架定义的一个模版
 ![](http://ohsqlm7gj.bkt.clouddn.com/17-9-3/39716306.jpg)，后面所有的异常信息网页都是基于这个模版去修改的。进入这个函数来到org.springframework.util.PropertyPlaceholderHelper里面，其中parseStringValue函数是整个异常网页内容的生成函数。
-![](http://ohsqlm7gj.bkt.clouddn.com/17-9-3/10984658.jpg)经过对整个函数的调试分析，可以理出函数的大致流程如下，关键代码有注释:
+![](http://ohsqlm7gj.bkt.clouddn.com/17-9-3/10984658.jpg)经过对整个函数的调试分析，可以理出函数的大致流程如下，关键代码有注释:  
 ```
 protected String parseStringValue(String strVal, PropertyPlaceholderHelper.PlaceholderResolver placeholderResolver, Set<String> visitedPlaceholders) {
         StringBuilder result = new StringBuilder(strVal);// 新建一个string buffer ，第一次是默认的 <html><body><h1>OAuth Error</h1><p>${errorSummary}</p></body></html>**/
@@ -47,7 +47,8 @@ protected String parseStringValue(String strVal, PropertyPlaceholderHelper.Place
         }
 
         return result.toString();
-    }  ```  
+    } 
+```  
 ![](http://ohsqlm7gj.bkt.clouddn.com/17-9-3/83104366.jpg)
 SpEL表达式，当函数将error=&quot;invalid_grant&quot;, error_description=&quot;Invalid redirect: ${1-65535} does not match one of the registered values: [http://www.baidu.com]&quot;中的1-65535提取出来并解析了。于是1-65535被执行了。这也符合了官方的描述。
 整理整个流程如下:  
