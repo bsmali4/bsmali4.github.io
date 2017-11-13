@@ -10,3 +10,4 @@ title: 关于我
 <p>个性签名:我曾经也是一颗多情的种子，后来下了一场大雨被淹死了。
 <p>个人邮箱:root@codersec.net
 <p>qq群:MjEzMTc0NjMz
+<p>cve:CVE-2017-16799,CVE-2017-16798
