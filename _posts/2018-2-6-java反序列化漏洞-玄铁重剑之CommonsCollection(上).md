@@ -11,7 +11,7 @@ tag: 漏洞分析
  CommonsCollection, commons-collections.jar
 ##  介绍:
 Java Collections Framework 是JDK 1.2中的一个重要组成部分。它增加了许多强大的数据结构，加速了最重要的Java应用程序的开发。从那时起，它已经成为Java中集合处理的公认标准。官网介绍如下:
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/38664389.jpg)
+![](http://pic.findbugs.top/18-2-1/38664389.jpg)
 Commons Collections使用场景很广，很多商业,开源项目都使用到了commons-collections.jar。
 很多组件，容器，cms(诸如WebLogic、WebSphere、JBoss、Jenkins、OpenNMS等)的rce漏洞都和Commons Collections反序列被披露事件有关。
 ##  正文:
@@ -65,7 +65,7 @@ win下
 	
 ###  案例  
   java有一个特征，不管经过几层封装，封装成什么类型，最终在readObject的时候，都会按照被封装的倒序去执行readObject。(ps:这是一段极其抽象的话，为了解释这段抽象的话，我画了一个看起来很抽象的画，在下师从抽象派大师梵高)
-  ![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/73877567.jpg)
+  ![](http://pic.findbugs.top/18-2-1/73877567.jpg)
   即使最后是读者们执行readObject，最后也会一层一层到上帝来执行readObject，具体例子如下:
 	
 	public class A implements Serializable {
@@ -123,7 +123,7 @@ win下
  整个程序流程如下，先调用writeObjectToFile  函数将类A的对象序列化并保存到文件object.txt中，第二个流程是打开object.txt，并执行readObject函数，那么最终会执行到类A中定义的readObject函数，该函数中可以用做恶意操作，例如用来执行命令等，运行完这个流程后弹出了计算器。
      CVE-2015-8103刚出来的时候，boss直接被捅成了马蜂窝(威力可见一斑)。通过透漏的信息，我们得知 invoker/JMXInvokerServlet在这个请求中，找到jboss invoker/JMXInvokerServlet这个接口，我们可以查看其源码
 在 文件 org.jboss.invocation.http.servlet.InvokerServlet.java 中，其中函数processRequest中有这么一个片段
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/11718491.jpg)
+![](http://pic.findbugs.top/18-2-1/11718491.jpg)
 	可以很清晰地看到，其作用是直接将request请求的数据直接给反序列化了，如果我们能找到某个序列化类，并在其readObject函数中直接或者间接调用了InvokerTransformer.transform,岂不是美滋滋。
 查看 InvokerTransformer.transform的被调用情况，调用的地方有很多，其中 LazyMap.get()是ysoserial中提到的,网上也有很多都是基本分析TransformedMap.checkSetValue的。接下来会对两种poc分析
 ####  情况1(LazyMap.get())
@@ -172,10 +172,10 @@ InvocationHandler的使用例子例子如下:
 	}
 
 运行main函数之后，运行结果如下:
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/7589896.jpg)
+![](http://pic.findbugs.top/18-2-1/7589896.jpg)
 很显然，再生成动态代理对象后，该对象执行的任何成员方法都会经过invoke函数。至于为什么这么做，大家想想，其实动态代理是对类功能的加强，比如你现在有一个person类，你想在perosn所有的成员函数之前加一个初始化一些环境变量，在运行之后回收环境变量的操作，怎么做，每个函数都去加这些？很显然用这种动态代理的方式就方便多了，所有函数都会经过invoke，那么直接就在method.invoke(this.proxied, args)前后初始化和回收环境好了(扯着扯着就扯到AOP编程的知识了，有些扯远了)
 其中LazyMap.get()函数内容如下:
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/42118615.jpg)
+![](http://pic.findbugs.top/18-2-1/42118615.jpg)
 factory的赋值通过decorate函数
 	
 	public static Map decorate(Map map, Transformer factory) {
@@ -186,7 +186,7 @@ factory的赋值通过decorate函数
 AnnotationInvocationHandler.readObject()->AnnotationInvocationHandler.invoke()->LazyMap.get()->InvokerTransformer.transform()
 
 直接借助InvokerTransformer invokerTransformer = new InvokerTransformer("exec", new Class[]{String[].class}, new Object[]{execArgs});会提示
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/66830548.jpg)
+![](http://pic.findbugs.top/18-2-1/66830548.jpg)
 具体的原因是因为，在 get(Object key)函数中默认传入的entrySet,而不是Runtime.getRuntime()。
 其中ChainedTransformer中的transform比较有意思
 	
@@ -297,7 +297,7 @@ InvokerTransformer.transform()->TransformedMap.checkSetValue()->AbstractInputChe
 String name = memberValue.getKey();
 Class<?> memberType = memberTypes.get(name);
 memberTypes是Retention，查找下注释Retention中的成员，发现有一个value。
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/3738114.jpg)
+![](http://pic.findbugs.top/18-2-1/3738114.jpg)
 那么memberValues只需要put一个键值对，其键为value即可，memberValues.put('value', 'xxx'),完整poc如下:
 	
 	public InvocationHandler getObject(final String command) throws Exception {
@@ -368,7 +368,7 @@ memberTypes是Retention，查找下注释Retention中的成员，发现有一个
 	field.set(fieldName, value);
 	}
 	
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/29737134.jpg)
+![](http://pic.findbugs.top/18-2-1/29737134.jpg)
 
 ## 参考链接 
 [https://github.com/frohoff/ysoserial]()

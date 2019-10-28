@@ -11,9 +11,9 @@ xssfork是新一代xss漏洞探测工具，其开发的目的是帮助安全从�
 关于key,为了保证外部不能非法调用服务，xssforkapi采用的是http协议验证key的方式。
 ##key的获取方式
 在每次启动xssforkapi的时候，会将key写入到根目录authentication.key中，你也可以在每次启动服务的时候看到key。
-![](http://ohsqlm7gj.bkt.clouddn.com/17-7-28/74466819.jpg)
+![](http://pic.findbugs.top/17-7-28/74466819.jpg)
 key默认是每次启动服务不更新的，你也可以在下一次启动服务的时候强制更新，只需要启动的时候指定--refresh True即可。值得注意的时候，refresh指定为true之后，原有的保存在data目录下xssfork.db将会清除，这意味着你将清除你之前所有的检测纪录。
-![](http://ohsqlm7gj.bkt.clouddn.com/17-7-28/52701244.jpg)
+![](http://pic.findbugs.top/17-7-28/52701244.jpg)
 ##新建扫描任务
 需要向服务传递两个参数,1.key(主要用于验证身份)；2.检测参数
 ### get协议检测
@@ -189,7 +189,7 @@ if __name__ == "__main__":
 
 效果
 
-![](http://ohsqlm7gj.bkt.clouddn.com/17-7-28/70449749.jpg)
+![](http://pic.findbugs.top/17-7-28/70449749.jpg)
 #免责申明
 xssfork保证竭诚为网络用户提供最安全的上网服务，但因不可避免的问题导致出现的问题，我们尽力解决，期间引起的问题我们不承担以下责任。  
 ###第 一 条  

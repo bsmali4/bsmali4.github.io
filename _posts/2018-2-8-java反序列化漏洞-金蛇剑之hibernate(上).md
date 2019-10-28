@@ -13,15 +13,15 @@ tag: 漏洞分析
   Hibernate是一个开放源代码的对象关系映射框架，它对JDBC进行了非常轻量级的对象封装，它将POJO与数据库表建立映射关系，是一个全自动的orm框架，hibernate可以自动生成SQL语句，自动执行，使得Java程序员可以随心所欲的使用对象编程思维来操纵数据库。曾几何时，java web程序员必备面试宝典,ssh(spring+struts2+hibernate)，当年笔者上javaweb课时，老师安利ssh,可见hibernate当年影响力多大。今天笔者跟着大家一起来学习分析hibernate的反序列化漏洞。
 ## 正文:
  全局搜索了下关键字invoke,发现调用的地方很多。其中org.hibernate.property.BasicPropertyAccessor中BasicGetter类中get函数中调用了此函数，后面构造分析的poc都是基于此类的。
- ![](http://ohsqlm7gj.bkt.clouddn.com/18-2-6/97813600.jpg)
+ ![](http://pic.findbugs.top/18-2-6/97813600.jpg)
  根据前几篇的分析，我们大致有了思路。看能不能借助 Xalan’sTemplatesImpl的_bytecodes字段来new一个evil类，或者是借助JdbcRowSetImpl,JNDIConnectionPool来做JNDI绑定(绑定这个词我也不知道恰不恰当)。
- ![](http://ohsqlm7gj.bkt.clouddn.com/18-2-6/43839589.jpg)
+ ![](http://pic.findbugs.top/18-2-6/43839589.jpg)
  org.hibernate.engine.spi.TypedValue.TypedValue.readObject()->org.hibernate.engine.spi.TypedValue.initTransients()->org.hibernate.type.ComponentType.getHashCode()->org.hibernate.type.ComponentType.getPropertyValue()->org.hibernate.tuple.component.AbstractComponentTuplizer.getPropertyValue()->org.hibernate.property.BasicPropertyAccessor.BasicGetter.get()
  首先先看BasicGetter类，其构造函数中需要指定3个参数,class,method,propertyName
- ![](http://ohsqlm7gj.bkt.clouddn.com/18-2-6/21652608.jpg)
+ ![](http://pic.findbugs.top/18-2-6/21652608.jpg)
  有如下大致思路，将method指定为getOutputProperties,然后将target传入一个TemplatesImpl对象。其中调用的地方如下:
 org.hibernate.tuple.component.AbstractComponentTuplizer.getPropertyValue()
- ![](http://ohsqlm7gj.bkt.clouddn.com/18-2-6/29845091.jpg)
+ ![](http://pic.findbugs.top/18-2-6/29845091.jpg)
  还需要利用反射区构造一个Getter数组，并且将BasicGetter放至在该数组中。代码如下:
  
 	Class<?> getter = Class.forName("org.hibernate.property.Getter");
@@ -62,11 +62,11 @@ ComponentType.getPropertyValue函数如下:
  ComponentType componentType = (ComponentType)Tool.getFirstCtor("org.hibernate.type.ComponentType").newInstance();
         Tool.setFieldValue(componentType, "componentTuplizer", pojoComponentTuplizer);
 这里需要给propertySpan赋值，因为在getHashCode中，有个执行getPropertyValue的先决条件。
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-6/89196032.jpg)
+![](http://pic.findbugs.top/18-2-6/89196032.jpg)
 执行一个任意大于0的数字即可。
 最后一步中的TypedValue只有两个字段，type和value，分别指向
 method.invoke( target, (Object[]) null )中的method 和target，分别是TemplatesImpl.getOutputProperties和TemplatesImpl实体,TypedValue其部分关键代码如下:
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-6/11663981.jpg)
+![](http://pic.findbugs.top/18-2-6/11663981.jpg)
 
 最终构造poc如下:
 	
@@ -82,7 +82,7 @@ method.invoke( target, (Object[]) null )中的method 和target，分别是Templa
 	Tool.setFieldValue(typedValue, "type", componentType);
 	Tool.setFieldValue(typedValue, "value", tpl);
 
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-6/73527732.jpg)
+![](http://pic.findbugs.top/18-2-6/73527732.jpg)
 回顾下整个执行过程如下
 
 org.hibernate.engine.spi.TypedValue.TypedValue.readObject()->org.hibernate.engine.spi.TypedValue.initTransients()->org.hibernate.type.ComponentType.getHashCode()->org.hibernate.type.ComponentType.getPropertyValue()->org.hibernate.tuple.component.AbstractComponentTuplizer.getPropertyValue()->org.hibernate.property.BasicPropertyAccessor.BasicGetter.get()

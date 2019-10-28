@@ -17,18 +17,18 @@ xssfork作为sicklescan的一个功能模块，其开发主要目的是用于检
 对于这类fuzz过程,基本都是预先准备好一些payload,然后加载执行。对于这类io型密集的扫描模型，后端使用多线程就比较适用，但是由于phantomjs你可以理解为一个无界面的浏览器，在加载的时候，其缺陷也比较明显，比较吃内存，用它来发包自然不像requests库轻量。
 ## 编码脚本
 由于基础的payload模块，我收集了71个。
-![](http://ohsqlm7gj.bkt.clouddn.com/17-7-24/38956876.jpg)
+![](http://pic.findbugs.top/17-7-24/38956876.jpg)
 基础pyaload会在现有的基础上，会添加上各种闭合的情况。
-![](http://ohsqlm7gj.bkt.clouddn.com/17-7-24/58148554.jpg)
+![](http://pic.findbugs.top/17-7-24/58148554.jpg)
 除了这些基础的payload,xssfork还提供了几个编码脚本，查看脚本，可以看help
-![](http://ohsqlm7gj.bkt.clouddn.com/17-7-24/12237078.jpg)
+![](http://pic.findbugs.top/17-7-24/12237078.jpg)
 现阶段提供了10进制，16进制，随机大小写，关键字叠加四个脚本。
 ### 10hex_encode
 将html标签内部字符10进制化
 &lt;a href=&#x6a&#x61&#x76&#x61&#x73&#x63&#x72&#x69&#x70&#x74&#x3a&#x61&#x6c&#x65&#x72&#x74&#x28&#x36&#x35&#x35&#x33&#x34&#x29&#x3b&gt;aaa&lt;/a&gt;
-![](http://ohsqlm7gj.bkt.clouddn.com/17-7-24/19641734.jpg)
+![](http://pic.findbugs.top/17-7-24/19641734.jpg)
 其效果如下
-![](http://ohsqlm7gj.bkt.clouddn.com/17-7-24/26774362.jpg)
+![](http://pic.findbugs.top/17-7-24/26774362.jpg)
 
 ### 16hex_encode
 将html标签内部字符16进制化
@@ -64,8 +64,8 @@ xssfork作为sicklescan的一个功能模块，其开发主要目的是用于检
 ![](http://shentoushi.top/manypic/Uploads/2016-09-26/cookie%20xss.gif)
 
 
-![](http://ohsqlm7gj.bkt.clouddn.com/2017-07-24%20at%20%E4%B8%8B%E5%8D%884.23.gif)
-![](http://ohsqlm7gj.bkt.clouddn.com/2017-07-24%20at%20%E4%B8%8B%E5%8D%884.27.gif)
+![](http://pic.findbugs.top/2017-07-24%20at%20%E4%B8%8B%E5%8D%884.23.gif)
+![](http://pic.findbugs.top/2017-07-24%20at%20%E4%B8%8B%E5%8D%884.27.gif)
  post类型  
  python xssfork.py -u "xx" -d "xx"
  存储型  

@@ -11,7 +11,7 @@ tag: 漏洞分析
  CommonsCollection, commons-collections.jar
 ##  介绍:
 Java Collections Framework 是JDK 1.2中的一个重要组成部分。它增加了许多强大的数据结构，加速了最重要的Java应用程序的开发。从那时起，它已经成为Java中集合处理的公认标准。官网介绍如下:
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/38664389.jpg)
+![](http://pic.findbugs.top/18-2-1/38664389.jpg)
 Commons Collections使用场景很广，很多商业,开源项目都使用到了commons-collections.jar。
 很多组件，容器，cms(诸如WebLogic、WebSphere、JBoss、Jenkins、OpenNMS等)的rce漏洞都和Commons Collections反序列被披露事件有关。
 ##  正文:
@@ -37,11 +37,11 @@ PriorityQueue.readObject()->PriorityQueue.heapify()->PriorityQueue.siftDown()->P
 	       return invokerTransformer;
 	   }
 	
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/92800586.jpg)
+![](http://pic.findbugs.top/18-2-1/92800586.jpg)
 其中PriorityQueue.siftDownUsingComparator调用compare的地方如下，查看源码可知，我们要将runtime对象放在 queue中。
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/16223501.jpg)
+![](http://pic.findbugs.top/18-2-1/16223501.jpg)
 通过分析源码得知， 必须要给comparator赋值，comparator的赋值操作可以在构造函数里面进行。
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/55297502.jpg)
+![](http://pic.findbugs.top/18-2-1/55297502.jpg)
 通过最终分析组合出如下poc:
 	
 	public Queue<Object> getObject(final String command) throws Exception {
@@ -74,7 +74,7 @@ PriorityQueue.readObject()->PriorityQueue.heapify()->PriorityQueue.siftDown()->P
 	
 但是在序列化的时候就出错了，2333，
 很显然，Runtime不能直接序列化，因为他没有实现接口。
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/33519718.jpg)
+![](http://pic.findbugs.top/18-2-1/33519718.jpg)
 那么想通过类似于CommonsCollection1的方式去执行函数，即
 	
 	inal Transformer[] transformers = new Transformer[]{
@@ -93,7 +93,7 @@ PriorityQueue.readObject()->PriorityQueue.heapify()->PriorityQueue.siftDown()->P
 	Transformer transformerChain = new ChainedTransformer(transformers);
 	
 然而并不行，这个类在commons-collections4.jar中不具有类。最终还是看了一下ysoserial的poc，发现其利用的到是TemplatesImpl类,后面很多反序列化都用到这个。
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/13395039.jpg)
+![](http://pic.findbugs.top/18-2-1/13395039.jpg)
 笔者记得在廖新喜师傅在分析fastsjon反序列化的时候也提到过这个，[http://xxlegend.com/2017/04/29/title-%20fastjson%20%E8%BF%9C%E7%A8%8B%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96poc%E7%9A%84%E6%9E%84%E9%80%A0%E5%92%8C%E5%88%86%E6%9E%90/](http://xxlegend.com/2017/04/29/title-%20fastjson%20%E8%BF%9C%E7%A8%8B%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96poc%E7%9A%84%E6%9E%84%E9%80%A0%E5%92%8C%E5%88%86%E6%9E%90/)
 我们需要将一个编译成class 文件的类进行base64编码，并且赋值给_bytecodes，关于怎么做可以参考廖师傅的文章。我这里讲一下pwntester是怎么做的，这种做法需要借助ClassPool。
 ###浅谈ClassPool怎么用: 
@@ -119,11 +119,11 @@ classPool简单用法如下:
 	}
 	
 运行上面的代码就会生成一个class文件，反编译结果如下:
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/43466655.jpg)
+![](http://pic.findbugs.top/18-2-1/43466655.jpg)
 这里有一个小技巧，就是在Class.newInstance的时候，可以在Class的构造函数里面加要执行的恶意代码，但是也可以 通过insertAfter()将要执行的代码在构造函数运行后运行。
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/20467796.jpg)
+![](http://pic.findbugs.top/18-2-1/20467796.jpg)
 其生成的代码如下:
-![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/93917050.jpg)
+![](http://pic.findbugs.top/18-2-1/93917050.jpg)
 最终调试完成之后poc如下:
 	
 	final Object templates = Gadgets.createTemplatesImpl(command);
@@ -138,8 +138,8 @@ classPool简单用法如下:
 其中用到的是函数 TemplatesImpl.newTransformer，而不是TemplatesImpl.getTransletInstance，因为getTransletInstance权限是private不能被直接反射?试了几个public权限的函数，比如getOutputProperties，newTransformer都可以。 且getOutputProperties，newTransformer中都有调用getTransletInstance。
 ##  拓展学习
   其实除了InvokerTransformer.transformat，还可以利用InstantiateTransformer.transformat()，其中collcetion5就是利用了com.sun.org.apache.xalan.internal.xsltc.trax.TrAXFilter构造函数中调用了TemplatesImpl.getTransletInstance()
-  ![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/79221799.jpg)
-  ![](http://ohsqlm7gj.bkt.clouddn.com/18-2-1/65780167.jpg)
+  ![](http://pic.findbugs.top/18-2-1/79221799.jpg)
+  ![](http://pic.findbugs.top/18-2-1/65780167.jpg)
   其调用链更复杂
 PriorityQueue.readObject()->PriorityQueue.heapify()->PriorityQueue.siftDown()->PriorityQueue.siftDownUsingComparator()->TransformingComparator.compare()->InstantiateTransformer.transformat()->com.sun.org.apache.xalan.internal.xsltc.trax.TrAXFilter.newInstance()->TemplatesImpl.getTransletInstance()->Class.newInstance()
 
